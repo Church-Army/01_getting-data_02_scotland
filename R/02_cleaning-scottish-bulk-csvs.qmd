@@ -1,0 +1,207 @@
+---
+title: "Cleaning Scottish Census Data"
+author: "Dave"
+format: html
+editor: visual
+execute:
+  output: false
+---
+
+# Cleaning Scottish Census Data
+
+## Housekeeping
+
+### Libraries
+
+```{r libs}
+library(here)
+library(fs)
+library(vroom)
+library(dplyr)
+library(readr) # for parse_number
+library(janitor) # for clean_names
+library(stringr)
+library(tidyr)
+```
+
+### File paths
+
+```{r paths}
+in_csvs <- function(...) here("NRS-bulk-tables", ...)
+```
+
+## Cleaning Data
+
+## Helpers
+
+### 1. Correctly name first column
+
+The first column of each table is output area codes but it had no name
+
+```{r makeNameCodeCol}
+name_code_col <- function(x) rename(x, oa_code = "x1")
+```
+
+### 2. Remove `all_people` or `all_households` column
+
+```{r removeAllPeople}
+remove_all_people <- function(x) select(x, -all_people)
+remove_all_households <- function(x) select(x, -all_households)
+```
+
+### 3. Remove totals row
+
+```{r removetotalsRow}
+remove_totals_row <- function(x) filter(x, oa_code != "S92000003")
+```
+
+### 4. Parse numbers
+
+Apparently NRS also put commas into their numbers? I don't know man. These are the bulk downloads for 'putting on to your own system'. smh
+
+Oh also they code zeroes as a hypen? Let's fix that in the same process
+
+```{r parseNumbers}
+parse_numbers <- function(x, not = oa_code){
+  not = enexpr(not)
+  out <- mutate(
+    x, 
+    across(-!!not & where(is.character),
+           \(x){
+             replace(x, x == "-", 0) |> 
+               parse_number()
+           }))
+  return(out)
+}
+```
+
+### Big helper wrapper
+
+Combine several of the helpers into one function
+
+```{r generalClean}
+general_clean <- function(x, remove_all = "people"){
+  
+  stopifnot(remove_all %in% c("people", "households"))
+  if(remove_all == "people") remover <- remove_all_people
+  else remover <- remove_all_households
+  
+  clean_names(x) |> 
+    name_code_col() |> 
+    remover() |> 
+    remove_totals_row() |> 
+    parse_numbers()
+}
+```
+
+### Cleaning Age Data
+
+```{r cleaningAgeData}
+age <- vroom(in_csvs("SAPE_SYOA_ALL_2021.csv"),
+                   guess_max = Inf, show_col_types = FALSE)
+
+age <- filter(age, FeatureType == "2011 Data Zone",
+              Measurement == "Count",
+              Units == "People",
+              Sex == "All")
+
+age <- select(age, dz_2011_code = FeatureCode, Age, Value) 
+
+age <- pivot_wider(age, names_from = "Age", values_from = "Value")
+
+age <- clean_names(age)
+
+age <- rename_with(age, str_replace, -dz_2011_code, "x", "age_")
+
+# age <- general_clean(age)
+# 
+# age <- select(age, -mean_age, -median_age)
+# 
+# ## add age_suffix (req. 9)
+# age <- rename_with(age,
+#                    str_replace,
+#                    where(is.numeric),
+#                    "(?<=^)x", "age_")
+# ## age years_suffix (req. 12)
+# age <- rename_with(age,
+#                    str_c,
+#                    where(is.numeric) & !age_90_and_over,
+#                    "_years")
+# ## remove "to_" (req. 10)
+# age <- rename_with(age,
+#                    str_remove,
+#                    where(is.numeric), 
+#                    "_to")
+# ## Rename final var name
+# age <- rename(age, age_90_years_and_over = "age_90_and_over")
+```
+
+### Cleaning ethnicity data
+
+```{r cleanEthnicity}
+ethnicity <- vroom(in_csvs("KS201SC.csv"),
+                   guess_max = Inf, show_col_types = FALSE)
+
+ethnicity <- general_clean(ethnicity)
+```
+
+### Cleaning religion data
+
+```{r cleanReligion}
+religion <- vroom(in_csvs("KS209SCb.csv"),
+                   guess_max = Inf, show_col_types = FALSE)
+
+religion <- general_clean(religion)
+```
+
+### Cleaning household composition data
+
+```{r cleaningHouseholdCompositionData}
+household_composition <- vroom(in_csvs("KS105SC.csv"),
+                   guess_max = Inf, show_col_types = FALSE)
+
+household_composition <- general_clean(household_composition,
+                                       remove_all = "households")
+```
+
+### Cleaning general health data
+
+```{r cleaningGeneralHealth}
+general_health <- vroom(in_csvs("KS301SCb.csv"),
+                   guess_max = Inf, show_col_types = FALSE)
+
+general_health <- general_clean(general_health)
+
+general_health <- select(general_health, oa_code, starts_with("general_health"))
+general_health <- rename_with(
+  general_health, 
+  str_remove,
+  where(is.numeric),
+  "general_health_"
+)
+```
+
+## Save all data
+
+```{r save_census_data}
+
+census_dir <- function(...){
+  here("census-data_scotland", ...)
+}
+
+save_census_data <- function(x, name, geography = "oa", year = "2011"){
+  full_name <- str_c("scotland", name, geography, year, sep = "_")
+  
+  rds_name <- str_c(full_name, ".RDS")
+  csv_name <- str_c(full_name, ".csv")
+  
+  vroom_write(x, census_dir(csv_name), delim = ",")
+  saveRDS(x, census_dir(rds_name))
+}
+
+save_census_data(age, "age", "dz", "2021")
+save_census_data(ethnicity, "ethnicity")
+save_census_data(general_health, "general-health")
+save_census_data(household_composition, "household-composition")
+save_census_data(religion, "religion")
+```

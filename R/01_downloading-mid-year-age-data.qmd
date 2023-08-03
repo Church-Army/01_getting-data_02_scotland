@@ -1,0 +1,60 @@
+---
+title: "01_download-scottish-census-data"
+author: "Dave"
+format: html
+editor: visual
+---
+
+## Housekeeping
+
+### Libraries
+
+```{r lib}
+library(here)
+library(vroom)
+library(fs)
+library(stringr)
+```
+
+### File paths
+
+```{r filePaths}
+dir_create(here("downloads"))
+
+downloads <- function(...) here("downloads", ...)
+```
+
+## Download data
+
+## Set timeout
+
+```{r setTimeout}
+options(timeout = 60*4) # 4 minutes
+```
+
+## Helpers
+
+### `scot_download_url`
+
+```{r scotDownloadUrl}
+scot_download_url <- function(file_id){
+  str_c("http://statistics.gov.scot/downloads/file?id=", file_id)
+}
+```
+
+### Download age data
+
+```{r downloadAgeData}
+age_file_id <- 
+  "3770628c-c731-40bf-9205-2e2096757ccb%2FPopulation+Estimates+Detailed.zip"
+
+download.file(scot_download_url(age_file_id),
+              destfile = downloads("scotland-population-age-estimates.zip"),
+              quiet = TRUE, mode = "wb",
+              cacheOK = FALSE)
+
+unzip(downloads("scotland-population-age-estimates.zip"),
+      files = "SAPE_SYOA_All_2021.csv",
+      exdir = downloads())
+      
+```

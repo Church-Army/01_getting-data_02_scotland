@@ -1,0 +1,62 @@
+---
+title: "Harmonising Ethnicity (NI)"
+author: "Dave"
+format: html
+editor: visual
+---
+
+## Housekeeping
+
+### Libraries
+
+```{r libs}
+library(fs)
+library(here)
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(vroom)
+```
+
+### Load data
+
+```{r loadData}
+ethnicity <- readRDS(here("census-data_scotland",
+                          "scotland_ethnicity_oa_2011.RDS"))
+```
+
+## Harmonise
+
+```{r harmonise}
+ethnicity <- pivot_longer(ethnicity, -oa_code,
+                          names_to = "ethnicity", values_to = "n")
+
+ethnicity <-
+  mutate(ethnicity,
+         ethnicity = case_when(
+           
+           str_starts(ethnicity, "white")     ~ "white",
+           str_starts(ethnicity, "mixed_")     ~ "mixed",
+           str_starts(ethnicity, "asian_")     ~ "asian",
+           str_starts(ethnicity, "african")    ~ "african_carribbean_black",
+           str_starts(ethnicity, "caribbean_") ~ "african_carribbean_black",
+           str_starts(ethnicity, "other_")     ~ "other"))
+
+ethnicity <- group_by(ethnicity, oa_code, ethnicity)
+
+ethnicity <- count(ethnicity, wt = n)
+
+ethnicity <- pivot_wider(ethnicity, values_from = n, names_from = ethnicity)
+```
+
+## Save harmonised data
+
+```{r saveData}
+saveRDS(ethnicity,
+        here("census-data_scotland",
+             "scotland_ethnicity-harmonised_oa_2011.RDS"))
+
+vroom_write(ethnicity, 
+            here("census-data_scotland",
+                 "scotland_ethnicity-harmonised_oa_2011.csv"))
+```
