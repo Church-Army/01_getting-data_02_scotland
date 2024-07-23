@@ -1,0 +1,56 @@
+---
+title: "Formatting NRS tables"
+author: "Dave"
+format: html
+editor: visual
+---
+
+## Libraries
+
+```{r libraries}
+library(fs)
+library(here)
+library(vroom)
+library(purrr)
+library(stringr)
+library(janitor)
+library(dplyr)
+```
+
+## Read tables
+
+```{r read_tables}
+paths <-
+  dir_ls(here("nrs-tables"))
+
+paths <-
+  set_names(paths, 
+            path_ext_remove(paths) |> 
+              str_remove("(?<=^).+_") |> 
+              str_replace_all("-", "_"))
+
+paths
+
+tables <-
+  map(paths, \(x) vroom(x, skip = 4, show_col_types = FALSE)) |> 
+  map(\(x) rename(x, oa_code_2021 = 1)) |> 
+  map(clean_names)
+```
+
+## Drop 'all people' col
+
+```{r drop_all_people}
+tables <- map(tables, \(x) select(x, -any_of("all_people")))
+```
+
+## Rename
+
+```{r rename}
+tables$age_by_single_year <- 
+  rename_with(
+    tables$age_by_single_year, 
+    \(nm) str_replace(nm, "x", "age_"),
+    -1
+  ) |> 
+  rename(age_under_1 = under_1)
+```
