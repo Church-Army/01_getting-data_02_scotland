@@ -1,0 +1,127 @@
+---
+title: "Getting E&W Census Data"
+author: "Dave"
+format: html
+editor: visual
+execute:
+  output: false
+---
+
+## Housekeeping
+
+### Libraries
+
+We'll need these libraries in order to load census data from [Nomis](https://www.nomisweb.co.uk/)
+
+```{r libs}
+library(nomisr)
+# library(beepr) # previously implemented in interactive use
+library(fs)
+library(here)
+```
+
+### Filesystem
+
+We'll create a folder, `census-data_england-and-wales`, into which we can save our census outputs. We'll then make a wrapper function that saves the data as an *RDS* object with a specified filename within the folder we've created.
+
+```{r fileSystem}
+dir_create(here("census-data_england-and-wales")) # create directory
+
+## Function to save data into new directory
+census_save_rds <- function(x, filename){
+  saveRDS(x, here("nomis-downloads", filename))
+}
+```
+
+## Load data with nomisr
+
+### Where did these codes come from?
+
+`nomisr` is an R package that provides convenience functions for querying the [Nomis](https://www.nomisweb.co.uk/) database For each data set, the data are loaded via `nomis_get_data`, specifying an `id` and a `geography`. The ID's were obtained by searching for datasets by 'name' - I found the names in the query builder on the Nomis website. For example, to get the `id` for `rel_data`, I did something like:
+
+```{r example}
+#| eval: false
+
+result <- nomis_search("*TS030*") # This is the code for census 2021 religion stuff
+id <- result[["id"]]
+id
+# [1] "NM_2049_1"
+```
+
+### What are these geography codes
+
+Nomis uses geography codes to specify where the data should relate to. You can specify an actual geography (eg. if you just want religion in Devon, there's a code for that), and you can also specify a geographical fidelity. The data being queried here have one of two different geographies:
+
+| Geography code | Geography                | Description                                                                             |
+|:------------|:------------|:---------------------------------------------|
+| TYPE150        | Output area              | The smallest geographical units for E&W census data                                     |
+| TYPE151        | Medium super output area | The second smalles geographical units for such data. Comprised of multiple output areas |
+
+### Load religion data
+
+```{r loadReligionData}
+rel_data <- nomis_get_data("NM_2049_1", geography = "TYPE150")
+
+census_save_rds(rel_data, "england-wales_religion_oa_2021.RDS")
+rm(rel_data)
+```
+
+### Load ethnicity data
+
+```{r loadEthnicityData}
+ethn_data <- nomis_get_data("NM_2041_1", geography = "TYPE150")
+
+census_save_rds(ethn_data, "england-wales_ethnicity_oa_2021.RDS")
+rm(ethn_data)
+```
+
+### Load Household data
+
+```{r loadHouseholdData}
+house_data <- nomis_get_data("NM_2023_1", geography = "TYPE150")
+
+census_save_rds(house_data, "england-wales_household-composition_oa_2021.RDS")
+rm(house_data)
+```
+
+### Load age data
+
+Age by single year is only mapped at the area of middle-layer super output area - these are bigger, less detailed areas. Output area data is available for five-year age bands, rather than single years. For now, we'll get both.
+
+```{r loadAgeData}
+age_data    <- nomis_get_data("NM_2027_1", geography = "TYPE152") # msoa
+age_data_oa <- nomis_get_data("NM_2020_1", geography = "TYPE150") # oa 
+
+census_save_rds(age_data, "england-wales_age-by-single-year_msoa_2021.RDS")
+census_save_rds(age_data_oa, "england-wales_age-five-year-bands_oa_2021.RDS")
+rm(age_data, age_data_oa)
+```
+
+### Load health data
+
+#### Non-age-standardise
+
+There are two kinds of health data - age standardised and non-age standardised. Age standardisation allows for comparison between areas in which the age profiles of the population differ. Is this what we want? It wouldn't really describe actual health on-the-ground, so probably not.
+
+```{r loadHealthData}
+health_data <- nomis_get_data("NM_2055_1", geography = "TYPE150")
+
+census_save_rds(health_data, "england-wales_general-health_oa_2021.RDS")
+rm(health_data)
+```
+
+#### Age standardised
+
+You know what actually I would really love to have some age-standardised health data.
+
+Oh wait turns out you can't get age-standardised health data for small areas, those stats only go down to local authorities. But I'll retain this for posterity. We tried!
+
+```{r loadAgeStandardisedHealthData}
+#| eval: false
+# health_data_age_standardised <- nomis_get_data("NM_2092_1", geography = "TYPE150")
+# 
+# census_save_rds(health_data_age_standardised,
+#                 "england-wales_general-health-age-std_oa_2021.RDS")
+# 
+# rm(health_data_age_standardised)
+```
