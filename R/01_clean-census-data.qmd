@@ -32,7 +32,8 @@ paths <-
 paths
 
 tables <-
-  map(paths, \(x) vroom(x, skip = 4, show_col_types = FALSE)) |> 
+  map(paths, \(x) vroom(x, skip = 4, show_col_types = FALSE,
+                        guess_max = Inf)) |> 
   map(\(x) rename(x, oa_code_2021 = 1)) |> 
   map(clean_names)
 ```
@@ -53,4 +54,38 @@ tables$age_by_single_year <-
     -1
   ) |> 
   rename(age_under_1 = under_1)
+```
+
+## Reformat
+
+```{r reformat}
+tables <- 
+  map(tables, 
+    \(x){
+      mutate(x, across(-1,
+                       \(y){
+                         replace(y, y == "-", "0") |>
+                           as.numeric()
+                         }))
+      })
+```
+
+## Tidy untidy data
+
+```{r tidy_untidy}
+ethnic_group_tmp <- tables$ethnic_group
+
+tables$ethnic_group <- 
+  select(tables$ethnic_group, !ends_with("_total"))
+
+tables$ethnic_group_grouped <- 
+  select(ethnic_group_tmp, oa_code_2021, ends_with("_total"))
+```
+
+## Save
+
+```{r save}
+dir_create(here("data"))
+
+saveRDS(tables, here("data", "output-01_cleaned-tables.RDS"))
 ```
