@@ -1,0 +1,41 @@
+---
+title: "Writing data tables"
+author: "Dave"
+format: html
+editor: visual
+---
+
+## Libraries
+
+```{r libraries}
+library(fs)
+library(here)
+library(purrr)
+library(vroom)
+library(stringr)
+```
+
+## Read data
+
+```{r read_data}
+tables <- readRDS(here("data", "output-02_five-year-age-added.RDS"))
+```
+
+## Write tables
+
+```{r write_tables}
+scot <- dir_create(here("census-data-scotland"))
+
+iwalk(
+  tables, 
+  \(x, x_nm){
+    neat_name <- str_replace_all(x_nm, "_", "-")
+    file_name <- str_c(neat_name, "scotland", "2021", sep = "_")
+    save_path <- path(scot, file_name, ext = "csv")
+    rds_path  <- path(scot, file_name, ext = "RDS")
+    
+    vroom_write(x, save_path, delim = ",", bom = TRUE)
+    saveRDS(x, rds_path)
+  }
+)
+```
